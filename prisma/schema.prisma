@@ -1,0 +1,127 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Book {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  type      String
+  createdAt DateTime @default(now())
+  markets   Market[]
+}
+
+
+
+
+
+model CanonicalMarket {
+  id         String   @id @default(cuid())
+  eventId    String
+  name       String
+  marketType String
+  canonicalKey String @unique
+  createdAt  DateTime @default(now())
+
+  event      Event    @relation(fields: [eventId], references: [id])
+  outcomes   CanonicalOutcome[]
+  mappings   MarketMapping[]
+}
+
+model Event {
+  id        String   @id @default(cuid())
+  name      String
+  eventKey  String   @unique
+  startTime DateTime?
+  createdAt DateTime @default(now())
+  markets   Market[]
+  canonicalMarkets CanonicalMarket[]
+}
+
+
+
+
+
+model Market {
+  id         String   @id @default(cuid())
+  bookId     String
+  eventId    String
+  externalId String
+  name       String
+  marketType String
+  createdAt  DateTime @default(now())
+
+  book       Book     @relation(fields: [bookId], references: [id])
+  event      Event    @relation(fields: [eventId], references: [id])
+  outcomes   Outcome[]
+  mappings   MarketMapping[]
+
+  @@unique([bookId, externalId])
+}
+
+
+model MarketMapping {
+  id               String   @id @default(cuid())
+  canonicalMarketId String
+  marketId          String
+  confidence       Float    @default(1.0)
+  method           String   @default("manual") // "manual" | "auto"
+  createdAt        DateTime @default(now())
+
+  canonicalMarket   CanonicalMarket @relation(fields: [canonicalMarketId], references: [id])
+  market            Market          @relation(fields: [marketId], references: [id])
+
+  @@unique([canonicalMarketId, marketId])
+}
+
+model CanonicalOutcome {
+  id               String   @id @default(cuid())
+  canonicalMarketId String
+  name             String   // "YES" / "NO" or "OVER" / "UNDER"
+  createdAt        DateTime @default(now())
+
+  canonicalMarket   CanonicalMarket @relation(fields: [canonicalMarketId], references: [id])
+  outcomeLinks      OutcomeLink[]
+}
+
+model Outcome {
+  id        String   @id @default(cuid())
+  marketId  String
+  name      String
+  createdAt DateTime @default(now())
+
+  market    Market   @relation(fields: [marketId], references: [id])
+  quotes    Quote[]
+  links     OutcomeLink[]
+}
+
+model OutcomeLink {
+  id                String @id @default(cuid())
+  canonicalOutcomeId String
+  outcomeId          String
+
+  canonicalOutcome   CanonicalOutcome @relation(fields: [canonicalOutcomeId], references: [id])
+  outcome            Outcome          @relation(fields: [outcomeId], references: [id])
+
+  @@unique([canonicalOutcomeId, outcomeId])
+}
+
+model Quote {
+  id         String   @id @default(cuid())
+  outcomeId  String
+  // We'll store decimal odds for MVP:
+  decimalOdds Float
+  // optional bid/ask later:
+  bid        Float?
+  ask        Float?
+  source     String   // "oddsapi" | "kalshi" | "polymarket" | etc.
+  timestamp  DateTime @default(now())
+
+  outcome    Outcome   @relation(fields: [outcomeId], references: [id])
+
+  @@index([timestamp])
+}
