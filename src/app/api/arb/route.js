@@ -43,6 +43,8 @@ export async function POST(req) {
       return Response.json({ error: "Canonical market must have exactly 2 outcomes" }, { status: 400 });
     }
 
+    const ALLOWED_BOOK_TYPES = new Set(["kalshi", "polymarket"]);
+
     // For each canonical outcome, find the best available quote (max decimal odds) among linked outcomes.
     const legs = cm.outcomes.map((co) => {
       let best = null;
@@ -50,6 +52,7 @@ export async function POST(req) {
       for (const link of co.outcomeLinks) {
         const out = link.outcome;
         const book = out.market.book;
+        if (!ALLOWED_BOOK_TYPES.has(book?.type)) continue;
         const latestQuote = out.quotes?.[0]; // already ordered desc
 
         if (!latestQuote) continue;
@@ -80,7 +83,7 @@ export async function POST(req) {
 
     if (legs.some((x) => !x)) {
       return Response.json(
-        { error: "Missing quotes for one or more outcomes. Seed or ingest quotes first." },
+        { error: "Missing Kalshi/Polymarket quotes for one or more outcomes. Ingest first." },
         { status: 400 }
       );
     }

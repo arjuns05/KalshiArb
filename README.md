@@ -1,9 +1,9 @@
 # kalshi-sports-arb
 
-A Next.js + Prisma app for finding two-outcome arbitrage between **Kalshi** and **sportsbooks (via OddsAPI)**.
+A Next.js + Prisma app for finding two-outcome arbitrage between **Kalshi** and **Polymarket**.
 
 The app:
-- Polls live markets from Kalshi and OddsAPI
+- Polls live markets from Kalshi and Polymarket
 - Normalizes them into canonical two-outcome markets (`YES` / `NO`)
 - Stores market snapshots/quotes in SQLite via Prisma
 - Lets you select a market and run an arbitrage calculation
@@ -13,7 +13,7 @@ The app:
 
 - Node.js 18+
 - npm
-- OddsAPI key
+- Internet access to Kalshi + Polymarket public APIs
 
 ## Tech Stack
 
@@ -29,19 +29,15 @@ Create a `.env` file in project root.
 # Database
 DATABASE_URL="file:./dev.db"
 
-# OddsAPI (required)
-ODDS_API_KEY="REPLACE_ME"
-ODDS_API_BASE="https://api.the-odds-api.com/v4"
-ODDS_API_SPORTS="upcoming"
-ODDS_API_MARKETS="h2h"
-ODDS_API_REGIONS="us"
-ODDS_API_ODDS_FORMAT="decimal"
-ODDS_API_BOOKMAKERS="draftkings"
-
 # Kalshi
 KALSHI_API_BASE="https://api.elections.kalshi.com/trade-api/v2"
 KALSHI_MARKET_LIMIT="200"
 KALSHI_MAX_PAGES="5"
+
+# Polymarket
+POLYMARKET_GAMMA_BASE="https://gamma-api.polymarket.com"
+POLYMARKET_MARKET_LIMIT="200"
+POLYMARKET_MAX_PAGES="5"
 
 # Polling service
 POLL_ENABLED="true"
@@ -50,8 +46,8 @@ POLL_ON_STARTUP="true"
 ```
 
 Notes:
-- `ODDS_API_KEY` is required for sportsbook data.
 - Kalshi public market reads are used from `KALSHI_API_BASE`.
+- Polymarket public market reads are used from `POLYMARKET_GAMMA_BASE`.
 
 ## Setup
 
@@ -106,4 +102,3 @@ npm run start
   - Set `POLL_ENABLED="true"`
 - DB issues:
   - Re-run `npm run prisma:migrate`
-

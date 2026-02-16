@@ -1,12 +1,7 @@
-import { subscribe, startPolling } from "../../../../../lib/polling-service";
+import { subscribe } from "../../../../../lib/polling-service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-// Initialize polling service when this route is accessed
-if (typeof window === "undefined") {
-  startPolling();
-}
 
 /**
  * Server-Sent Events (SSE) endpoint for real-time polling updates

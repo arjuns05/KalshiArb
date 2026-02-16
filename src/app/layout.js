@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Kalshi x Sportsbook Arb MVP",
+  title: "Kalshi x Polymarket Arb MVP",
   description: "Simple arbitrage calculator for mapped markets"
 };
 
