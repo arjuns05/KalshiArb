@@ -10,7 +10,7 @@ export async function GET() {
   try {
     await saveScan(result);
   } catch (error) {
-    console.error("could not save scan", error);
+    console.warn("could not save scan:", error.message);
   }
 
   return NextResponse.json(result);

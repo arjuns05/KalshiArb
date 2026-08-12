@@ -77,6 +77,20 @@ nav {
   box-shadow: 0 0 0 4px #dff4ea;
 }
 
+.nav-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.socket-status {
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 13px;
+}
+
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
@@ -132,6 +146,7 @@ h1 {
 .hero-panel div:last-child { border-bottom: 0; }
 .hero-panel span { color: var(--muted); font-size: 13px; }
 .hero-panel strong { font-size: 28px; line-height: 1; }
+.hero-panel .small-stat { color: var(--green); font-size: 13px; }
 
 .opportunity {
   overflow: hidden;
@@ -284,6 +299,7 @@ footer {
 @media (max-width: 700px) {
   main { width: min(100% - 24px, 1080px); }
   nav { height: auto; padding: 18px 0; gap: 14px; }
+  .nav-status { align-items: flex-end; flex-direction: column; gap: 8px; }
   .hero { grid-template-columns: 1fr; gap: 24px; padding: 48px 5px 34px; }
   h1 { font-size: 42px; }
   .opportunity-head { display: block; padding: 25px 22px; }
