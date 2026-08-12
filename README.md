@@ -3,8 +3,6 @@
 Small Next.js app that scans public Kalshi and Polymarket markets and looks for
 simple Yes/No arbitrage pairs.
 
-This is intentionally built without Prisma. The database code is just `pg` plus
-plain SQL in `db/schema.sql`.
 
 ## Stack
 
