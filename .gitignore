@@ -21,9 +21,9 @@ pnpm-debug.log*
 .env.local
 .env.*.local
 
-# Prisma / SQLite local artifacts
-prisma/*.db
-prisma/*.db-journal
+# Local database dumps
+*.db
+*.db-journal
 
 # OS / editor
 .DS_Store

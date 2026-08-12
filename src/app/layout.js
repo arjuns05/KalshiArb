@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Kalshi x Polymarket Arb MVP",
-  description: "Simple arbitrage calculator for mapped markets"
+  title: "Edge - Prediction Market Arbitrage",
+  description: "Prediction market arbitrage dashboard for Kalshi and Polymarket.",
 };
 
 export default function RootLayout({ children }) {
