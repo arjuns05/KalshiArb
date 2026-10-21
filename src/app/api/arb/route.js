@@ -1,11 +1,15 @@
-import { NextResponse } from "next/server";
-import { loadArbitrage } from "../../../../lib/arb";
-import { saveScan } from "../../../../lib/db";
+import { loadArbitrage } from "../../../../lib/arb.js";
+import { saveScan } from "../../../../lib/db.js";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const result = await loadArbitrage();
+  let result;
+  try {
+    result = await loadArbitrage();
+  } catch {
+    return Response.json({ error: "Could not scan markets. Try again." }, { status: 502, headers: { "Cache-Control": "no-store" } });
+  }
 
   try {
     await saveScan(result);
@@ -13,5 +17,5 @@ export async function GET() {
     console.warn("could not save scan:", error.message);
   }
 
-  return NextResponse.json(result);
+  return Response.json(result, { headers: { "Cache-Control": "no-store" } });
 }

@@ -1,18 +1,12 @@
-# Prediction Market Arbitrage Tool
+# Kalshi / Polymarket candidate scanner
 
-Small Next.js app that scans public Kalshi and Polymarket markets and looks for
-simple Yes/No arbitrage pairs.
+A Next.js dashboard that compares complementary cross-venue ask prices, plus a Gemini research chat that consumes external market-data MCP servers.
 
+Read the [project flow and challenges](CODE_WALKTHROUGH.md) for architecture diagrams, MCP failure handling, current versus proposed retry behavior, and settlement-equivalence matching.
 
-## Stack
+The scanner proposes candidates using title overlap. Settlement equivalence, fees, synchronized prices and fillable quantities remain unverified. See [research and implementation limits](MCP_RESEARCH.md).
 
-- Next.js dashboard
-- API routes for scans and MCP-style enrichment
-- Express + WebSocket side server that pushes scan updates into the UI
-- PostgreSQL with simple SQL
-- Optional Google Gemini summary in `/api/mcp`
-
-## Setup
+## Run
 
 ```bash
 npm install
@@ -20,86 +14,50 @@ cp .env.example .env
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open http://localhost:3000 and click **Scan markets**. The dashboard calls `GET /api/arb`, which fetches both exchanges and returns fresh candidates. It shows loading, the last completed scan time, and source failures. A failed request preserves the previous results with an explicit notice. Nothing scans automatically on page load or on a timer; only the Next.js process is needed.
 
-To create the database table:
+PostgreSQL is optional. Configure `DATABASE_URL`, then run `psql "$DATABASE_URL" -f db/schema.sql`. Each `GET /api/arb` scan attempts to save a summary. Chat scans do not save summaries.
 
-bash:
-psql "$DATABASE_URL" -f db/schema.sql
+## Research chat
 
+Polymarket research uses [PolyTrackers](https://polytrackers.com/polymarket-mcp-server), an independent third-party MCP service. Kalshi MCP research is deferred. The scanner still compares both exchanges through their public APIs.
 
-The app still works without `DATABASE_URL`; it just skips saving scan history.
+1. Create a PolyTrackers account, then generate an Agent API Key from Profile with `signals:read` scope. Do not add trading scopes.
+2. Add the key and Gemini configuration to your server's `.env`:
 
-## Realtime server
+```dotenv
+GEMINI_API_KEY=...
+GEMINI_CHAT_MODEL=gemini-3.8-flash
+POLYMARKET_MCP_TOKEN=ptk_...
+```
 
-Run Next first, then start the WebSocket broadcaster in a second terminal:
+The endpoint defaults to `https://polytrackers.com/api/mcp`; `POLYTRACKERS_API_KEY` is an alias for the token at that endpoint. No credentials are stored in source or sent to the browser. The model default supports function calling per [Google’s model reference](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash); account access must be verified with your own key.
 
-bash:
-npm run realtime
-
-
-The dashboard connects to `ws://localhost:4000`, gets one scan right after the
-socket opens, and then receives pushed updates from the backend.
-
-The backend now uses Polymarket's public market WebSocket for price updates. It
-still loads REST snapshots for initial market discovery and for Kalshi, because
-Kalshi's current WebSocket docs require authentication for the connection.
-
-If you use a different socket URL, set:
+3. Restart the app and verify the connection:
 
 ```bash
-NEXT_PUBLIC_WS_URL=ws://localhost:4000
+npm run check:mcp
+npm run check:mcp -- --query Bitcoin
 ```
 
-If port `4000` is already taken, use a matching WebSocket port in both places:
+The first command verifies MCP initialization, tool discovery and the key's research capabilities. The second also calls the provider's market search. Neither calls Gemini or places orders. An authenticated live check cannot run until you supply a provider key.
 
-```bash
-NEXT_PUBLIC_WS_PORT=4001 npm run dev
-WS_PORT=4001 npm run realtime
-```
+The provider preset enables market search, market intelligence, batch contract lookups, CLOB quotes, briefings and anomaly context when the server and key allow them. It checks capabilities before research calls, filters tools using tier/scope metadata, and omits public market-trade history on Free accounts. Private account tools, trading, mock writes and scan triggers are excluded. `POLYMARKET_MCP_TOOLS` can narrow the preset, but cannot expand it beyond the research allowlist.
 
-## MCP server endpoint
+Requests sharing a provider key are serialized within this Node process and spaced by at least 250ms. HTTP 429 responses establish a cooldown from `Retry-After`; authentication and quota failures have safe, actionable errors. Multi-process deployments need a shared rate limiter. Provider tools may also return tool-level quota errors, which the assistant receives as failed evidence rather than invented results.
 
-`POST /api/mcp`
+Users can ask “Find Bitcoin markets on Polymarket and explain their settlement rules.” Gemini chooses MCP tools, reads results and returns an answer with sources and a tool trace. The current-candidate shortcut includes both contract IDs; local scanner/comparison functions can supply Kalshi contract details without claiming a Kalshi MCP connection. General news/web search is not connected.
 
-The app exposes one MCP-style HTTP JSON-RPC endpoint with one tool:
+The client retains optional custom Streamable HTTP support via `POLYMARKET_MCP_URL` and an explicit provider-specific tool list. A custom host does not inherit `POLYTRACKERS_API_KEY`. Leave `KALSHI_MCP_URL` blank to keep Kalshi research disabled; OAuth setup is not implemented. See [research and provider constraints](MCP_RESEARCH.md).
 
-- `market_context`: fetches the latest scan and answers using that scan as
-  context.
+## Code
 
-List tools:
+- `lib/markets.js`: exchange discovery, Polymarket batch books, contract details.
+- `lib/arb.js`: shared title matching and gross edge calculations.
+- `lib/chat/mcp-client.js`: external MCP connections, discovery and allowed calls.
+- `lib/chat/research.js`: Gemini tool loop and evidence trace.
+- `lib/investigation.js`: local scan filters, pair evidence and history.
+- `src/app/api/chat/route.js`: bounded research requests.
+- `src/app/Dashboard.js`: manual REST scanning, scan status, results and research chat.
 
-```bash
-curl -X POST http://localhost:3000/api/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-```
-
-Call the tool:
-
-```bash
-curl -X POST http://localhost:3000/api/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 2,
-    "method": "tools/call",
-    "params": {
-      "name": "market_context",
-      "arguments": {
-        "question": "What is the best arbitrage opportunity?",
-        "includeRawScan": false
-      }
-    }
-  }'
-```
-
-For quick manual testing, the endpoint also accepts:
-
-```json
-{
-  "question": "Why is this an arb?"
-}
-```
-
-
+Run `npm test` and `npm run build`. Tests use fixtures, including actual MCP client protocol exchanges with a mocked remote transport; they require no provider account or database.

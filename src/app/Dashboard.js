@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
+import ResearchChat from "./ResearchChat";
 
 function formatMoney(value) {
   return new Intl.NumberFormat("en-US", {
@@ -31,81 +32,32 @@ function formatDate(value) {
   }).format(date);
 }
 
-function getSocketUrl() {
-  if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
-  if (typeof window === "undefined") return "ws://localhost:4000";
+export default function Dashboard() {
+  const [result, setResult] = useState(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState(null);
 
-  const port = process.env.NEXT_PUBLIC_WS_PORT || "4000";
-  return `ws://${window.location.hostname}:${port}`;
-}
+  async function scanMarkets() {
+    if (scanning) return;
+    setScanning(true);
+    setScanError(null);
+    try {
+      const response = await fetch("/api/arb", { cache: "no-store", signal: AbortSignal.timeout(45000) });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.stats) throw new Error(data?.error || "Could not scan markets. Try again.");
+      setResult(data);
+    } catch (error) {
+      setScanError(error.name === "TimeoutError" ? "The scan timed out. Try again." : error.message);
+    } finally { setScanning(false); }
+  }
 
-export default function LiveDashboard({ initialResult }) {
-  const [result, setResult] = useState(initialResult);
-  const [socketStatus, setSocketStatus] = useState("Connecting");
-  const [lastUpdate, setLastUpdate] = useState(null);
-  const [feedSource, setFeedSource] = useState("initial scan");
-
-  useEffect(() => {
-    const socket = new WebSocket(getSocketUrl());
-
-    socket.addEventListener("open", () => {
-      setSocketStatus("Live socket connected");
-    });
-
-    socket.addEventListener("message", (event) => {
-      let message;
-
-      try {
-        message = JSON.parse(event.data);
-      } catch {
-        return;
-      }
-
-      if (message.type === "connected") {
-        setSocketStatus("Live socket connected");
-      }
-
-      if (message.type === "error") {
-        setSocketStatus("Socket scan failed");
-      }
-
-      if (message.type === "arb_update") {
-        setResult((current) => ({
-          ...current,
-          best: message.best,
-          stats: message.stats,
-          failures: message.failures || current.failures,
-        }));
-        setLastUpdate(message.at);
-        setFeedSource(message.source || "websocket");
-      }
-    });
-
-    socket.addEventListener("close", () => {
-      setSocketStatus("Socket disconnected");
-    });
-
-    socket.addEventListener("error", () => {
-      setSocketStatus("Socket unavailable");
-    });
-
-    return () => socket.close();
-  }, []);
-
-  const best = result.best;
-  const failures = result.failures || {};
-  const stats = result.stats;
+  const best = result?.best;
+  const failures = result?.failures || {};
+  const stats = result?.stats || { kalshi: 0, polymarket: 0, matches: 0, opportunities: 0 };
   const hasFailure = failures.kalshi || failures.polymarket;
   const hasEdge = best && best.edge > 0;
   const totalMarkets = stats.kalshi + stats.polymarket;
-  const updateLabel = useMemo(() => {
-    if (!lastUpdate) return "Waiting for first socket push";
-    return `Updated ${new Date(lastUpdate).toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-      second: "2-digit",
-    })}`;
-  }, [lastUpdate]);
+  const updateLabel = result?.scannedAt ? new Date(result.scannedAt).toLocaleString() : "Not scanned yet";
 
   return (
     <main>
@@ -117,9 +69,8 @@ export default function LiveDashboard({ initialResult }) {
         <div className="nav-status">
           <span className="status">
             <i />
-            {hasFailure ? "Partial live data" : "Live public data"}
+            {scanning ? "Scanning markets…" : result ? (hasFailure ? "Partial market data" : "Market snapshot") : "Ready to scan"}
           </span>
-          <span className="socket-status">{socketStatus}</span>
         </div>
       </nav>
 
@@ -128,12 +79,15 @@ export default function LiveDashboard({ initialResult }) {
           <p className="eyebrow">Prediction market arbitrage</p>
           <h1>Kalshi and Polymarket arb tracker</h1>
           <p className="intro">
-            Pulls public market prices, compares similar events, and updates this
-            dashboard from the WebSocket feed every time a new scan comes in.
+            Scan Kalshi and Polymarket public prices to compare similar events.
+            Results update when you request a new scan.
           </p>
+          <button className="context-button" type="button" onClick={scanMarkets} disabled={scanning}>
+            {scanning ? "Scanning markets…" : "Scan markets"}
+          </button>
         </div>
 
-        <div className="hero-panel" aria-label="Scan summary">
+        <div className="hero-panel" aria-label="Scan summary" aria-busy={scanning}>
           <div>
             <span>Markets scanned</span>
             <strong>{totalMarkets}</strong>
@@ -143,41 +97,46 @@ export default function LiveDashboard({ initialResult }) {
             <strong>{stats.matches}</strong>
           </div>
           <div>
-            <span>Open arbs</span>
+            <span>Candidates</span>
             <strong>{stats.opportunities}</strong>
           </div>
           <div>
-            <span>WebSocket</span>
+            <span>Last completed scan</span>
             <strong className="small-stat">{updateLabel}</strong>
           </div>
-          <div>
-            <span>Feed source</span>
-            <strong className="small-stat">{feedSource}</strong>
-          </div>
+
         </div>
       </section>
+
+      {scanError && <p className="chat-notice" role="alert">{scanError} {result && "Previous results are still shown; check the last completed scan time."}</p>}
+      {hasFailure && <div className="chat-notice" role="status">
+        {Object.entries(failures).filter(([, message]) => message).map(([venue, message]) => <p key={venue}>{venue === "kalshi" ? "Kalshi" : "Polymarket"}: {message}</p>)}
+      </div>}
 
       <section className="opportunity">
         <div className="opportunity-head">
           <div>
             <span className="live-pill">
-              {hasEdge ? "Best opportunity" : "Best live match"}
+              {hasEdge ? "Best candidate" : "Best quoted match"}
             </span>
-            <h2>{best ? best.title : "No comparable live markets found"}</h2>
+            <h2>{best ? best.title : result ? "No comparable markets found" : "Scan markets to find candidates"}</h2>
             <p>
               {best
                 ? `Matched market · Closes ${formatDate(best.closeTime)} · ${formatPercent(
                     best.score,
                   )} title match`
-                : "Fetched public markets did not produce a confident cross-venue match."}
+                : result ? "The scan did not return comparable contracts with available quotes." : "Start a scan to fetch prices from both exchanges."}
             </p>
           </div>
-          <div className="edge">
-            <span>{hasEdge ? "Guaranteed edge" : "Current gap"}</span>
-            <strong className={hasEdge ? "" : "negative"}>
-              {best ? formatPercent(best.edge) : "0.0%"}
-            </strong>
-            <small>before fees and fill risk</small>
+          <div className="opportunity-actions">
+            <a className="context-button" href="#research-title">Research contracts</a>
+            <div className="edge">
+              <span>{hasEdge ? "Potential gross edge" : "Current gap"}</span>
+              <strong className={hasEdge ? "" : "negative"}>
+                {best ? formatPercent(best.edge) : "0.0%"}
+              </strong>
+              <small>settlement, fees and fills unverified</small>
+            </div>
           </div>
         </div>
 
@@ -212,26 +171,29 @@ export default function LiveDashboard({ initialResult }) {
               </div>
               <span className="operator">-&gt;</span>
               <div>
-                <span>Guaranteed payout</span>
+                <span>Payout if equivalent</span>
                 <strong>$1.00</strong>
               </div>
               <span className="operator">=</span>
               <div className={hasEdge ? "profit" : "profit negative"}>
-                <span>Profit per contract</span>
+                <span>Gross edge per pair</span>
                 <strong>
                   {best.edge >= 0 ? "+" : ""}
                   {formatMoney(best.edge)}
                 </strong>
               </div>
             </div>
+
           </>
         ) : (
           <div className="empty-state">
-            <strong>Waiting for a cross-venue match</strong>
-            <span>Refresh after more public markets are available.</span>
+            <strong>{result ? "No cross-venue match in this scan" : "Ready for your first scan"}</strong>
+            <span>Click Scan markets to fetch current quotes.</span>
           </div>
         )}
       </section>
+
+      <ResearchChat candidate={best} />
 
       <section className="stats" aria-label="Venue counts">
         <div>
@@ -244,7 +206,7 @@ export default function LiveDashboard({ initialResult }) {
         </div>
         <div>
           <span>Data status</span>
-          <strong>{hasFailure ? "Partial" : "Live"}</strong>
+          <strong>{result ? (hasFailure ? "Partial" : "Snapshot") : "Not scanned"}</strong>
         </div>
       </section>
 
